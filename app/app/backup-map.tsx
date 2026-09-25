@@ -1,47 +1,68 @@
 import {useEffect,useRef,useState} from 'react';
-import L from 'leaflet';
-import type {GeoJsonObject} from 'geojson';
-import 'leaflet/dist/leaflet.css';
-import coastline from '@/lib/bali-coastline.json';
+import {Map as MapLibre,Marker,Popup,NavigationControl,AttributionControl,addProtocol,setWorkerUrl,type GeoJSONSource,type LayerSpecification} from 'maplibre-gl';
+import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
+import {Protocol} from 'pmtiles';
+import {layers,namedFlavor} from '@protomaps/basemaps';
+import 'maplibre-gl/dist/maplibre-gl.css';
 import type {Place} from '@/lib/places';
-
-type Props={points:Place[];selected:string;position:{lat:number;lng:number}|null;onSelect:(id:string)=>void;resetKey:number};
-
-/** The bundled coastline and itinerary never depend on a third-party map request. */
-export default function BackupMap({points,selected,position,onSelect,resetKey}:Props){
- const host=useRef<HTMLDivElement>(null),map=useRef<L.Map|null>(null),features=useRef<L.LayerGroup|null>(null);
- const select=useRef(onSelect);select.current=onSelect;
- const [detailed,setDetailed]=useState(false);
+import {itinerarySegments} from '@/lib/map-itinerary';
+setWorkerUrl(workerUrl);
+const protocol=new Protocol();
+addProtocol('pmtiles',protocol.tile);
+type Props={points:Place[];selected:string;position:{lat:number;lng:number}|null;onSelect:(id:string)=>void;resetKey:number;overview:boolean};
+/** Basemap, fonts, icons and worker all load from the same origin as the app. */
+export default function BackupMap({points,selected,position,onSelect,resetKey,overview}:Props){
+ const host=useRef<HTMLDivElement>(null),map=useRef<MapLibre|null>(null);
+ const markers=useRef<Marker[]>([]),select=useRef(onSelect);select.current=onSelect;
+ const [ready,setReady]=useState(false),[error,setError]=useState(false),[retry,setRetry]=useState(0);
  const pointsKey=points.map(p=>p.id).join(',');
  useEffect(()=>{
   if(!host.current)return;
-  const m=L.map(host.current,{zoomControl:false,attributionControl:true,minZoom:9,maxZoom:16,maxBounds:[[-9.15,114.3],[-7.85,116]],maxBoundsViscosity:1}).setView([-8.55,115.2],10);
+  setReady(false);setError(false);
+  const base=new URL(`${import.meta.env.BASE_URL}maps/`,location.origin).href;
+  let m:MapLibre;
+  try{m=new MapLibre({container:host.current,center:[115.24,-8.57],zoom:9.5,minZoom:8,maxZoom:18,
+   maxBounds:[[114.38,-8.92],[115.78,-8.02]],renderWorldCopies:false,attributionControl:false,
+   style:{version:8,glyphs:`${base}fonts/{fontstack}/{range}.pbf`,sprite:`${base}sprites/light`,
+    sources:{bali:{type:'vector',url:`pmtiles://${base}bali-20260925.pmtiles`,attribution:'<a href="https://www.openstreetmap.org/copyright">© OpenStreetMap</a> · <a href="https://protomaps.com">Protomaps</a>'}},
+    layers:layers('bali',namedFlavor('light'),{lang:'en'}) as LayerSpecification[]},
+  })}catch{setError(true);return;}
   map.current=m;
-  m.attributionControl.setPrefix(false);
-  m.createPane('island-outline').style.zIndex='150';
-  L.geoJSON(coastline as GeoJsonObject,{pane:'island-outline',interactive:false,style:{color:'#b4d4d7',weight:1.5,fillColor:'#eef3e5',fillOpacity:1},attribution:'<a href="https://www.naturalearthdata.com/">Natural Earth</a>'}).addTo(m);
-  L.tileLayer(import.meta.env.VITE_MAP_TILE_URL||'https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
-   maxZoom:19,referrerPolicy:'strict-origin-when-cross-origin',
-   attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-  }).on('tileload',()=>setDetailed(true)).addTo(m);
-  features.current=L.layerGroup().addTo(m);
-  const resize=new ResizeObserver(()=>m.invalidateSize({pan:false}));resize.observe(host.current);
-  return()=>{resize.disconnect();features.current=null;map.current=null;m.remove()};
- },[]);
+  m.addControl(new AttributionControl({compact:false}),'bottom-right');
+  m.addControl(new NavigationControl({showCompass:false}),'bottom-right');
+  const timeout=setTimeout(()=>setError(true),20000);
+  m.on('load',()=>{clearTimeout(timeout);setReady(true);setError(false)});
+  m.on('error',()=>setError(true));
+  m.on('idle',()=>{if(m.areTilesLoaded()){setReady(true);setError(false);clearTimeout(timeout)}});
+  const resize=new ResizeObserver(()=>m.resize());resize.observe(host.current);
+  return()=>{clearTimeout(timeout);resize.disconnect();markers.current.forEach(marker=>marker.remove());markers.current=[];map.current=null;m.remove()};
+ },[retry]);
  useEffect(()=>{
-  const m=map.current,layer=features.current;if(!m||!layer)return;
-  layer.clearLayers();
-  const unique=[...new Map(points.map(p=>[p.id,p])).values()];
-  if(points.length>1)L.polyline(points.map(p=>[p.lat,p.lng] as L.LatLngTuple),{color:'#20addb',weight:3,dashArray:'6 8',opacity:.85,interactive:false}).addTo(layer);
+  const m=map.current;if(!m)return;
+  markers.current.forEach(marker=>marker.remove());markers.current=[];
+  const unique=[...new globalThis.Map(points.map(p=>[p.id,p])).values()];
   unique.forEach((p,i)=>{
-   const icon=L.divIcon({className:'backup-marker',html:`<span class="backup-pin${selected===p.id?' is-selected':''}">${i+1}</span>`,iconSize:[32,32],iconAnchor:[16,16]});
-   const marker=L.marker([p.lat,p.lng],{icon,title:p.name,alt:p.name}).bindTooltip(p.name,{direction:'top',offset:[0,-14],permanent:selected===p.id,className:'backup-place-label'}).on('click',()=>select.current(p.id)).addTo(layer);
-   marker.getElement()?.setAttribute('aria-label',p.name);
+   const button=document.createElement('button');button.type='button';button.className='detail-map-marker';
+   button.setAttribute('aria-label',p.name);button.setAttribute('aria-pressed',String(selected===p.id));
+   const pin=document.createElement('span');pin.className=`backup-pin${selected===p.id?' is-selected':''}`;pin.textContent=overview?(p.kind==='住宿'?'宿':'●'):String(i+1);button.append(pin);
+   if((overview&&p.kind==='住宿')||selected===p.id){const label=document.createElement('span');label.className='detail-map-label';label.textContent=p.name;button.append(label)}
+   button.onclick=()=>select.current(p.id);
+   markers.current.push(new Marker({element:button,anchor:'center'}).setLngLat([p.lng,p.lat]).addTo(m));
   });
+  if(ready){
+   const data={type:'FeatureCollection' as const,features:itinerarySegments(points,overview)};
+   const source=m.getSource('itinerary-order') as GeoJSONSource|undefined;
+   if(source)source.setData(data);
+   else{m.addSource('itinerary-order',{type:'geojson',data});m.addLayer({id:'itinerary-order',type:'line',source:'itinerary-order',paint:{'line-color':'#10aee0','line-width':2,'line-opacity':.7,'line-dasharray':[2,3]}})}
+  }
   const focus=unique.find(p=>p.id===selected);
-  if(position){L.circleMarker([position.lat,position.lng],{radius:8,color:'#fff',weight:3,fillColor:'#178bea',fillOpacity:1}).bindTooltip('我的位置').addTo(layer);m.setView([position.lat,position.lng],14)}
-  else if(focus)m.fitBounds(L.latLngBounds([[focus.lat,focus.lng]]),{maxZoom:14,paddingTopLeft:[28,175],paddingBottomRight:[28,76]});
-  else if(unique.length)m.fitBounds(L.latLngBounds(unique.map(p=>[p.lat,p.lng])),{maxZoom:13,paddingTopLeft:[28,175],paddingBottomRight:[28,76]});
- },[pointsKey,selected,position?.lat,position?.lng,resetKey]);
- return <><div ref={host} className="backup-map" aria-label="巴厘岛行程地图"/><div className="backup-map-caption">{detailed?'':'简图 · '}行程点连线 · 道路导航请用 Google</div></>;
+  const padding={top:195,bottom:90,left:38,right:38};
+  if(position){const dot=document.createElement('span');dot.className='detail-location';markers.current.push(new Marker({element:dot}).setLngLat([position.lng,position.lat]).setPopup(new Popup().setText('我的位置')).addTo(m));m.easeTo({center:[position.lng,position.lat],zoom:15,padding})}
+  else if(focus)m.easeTo({center:[focus.lng,focus.lat],zoom:15,padding,duration:350});
+  else if(unique.length)m.fitBounds([[Math.min(...unique.map(p=>p.lng)),Math.min(...unique.map(p=>p.lat))],[Math.max(...unique.map(p=>p.lng)),Math.max(...unique.map(p=>p.lat))]],{padding,maxZoom:14,duration:0});
+ },[pointsKey,selected,position?.lat,position?.lng,resetKey,ready,retry,overview]);
+ return <><div ref={host} className="backup-map" aria-label="巴厘岛详细行程地图"/>
+  {!ready&&!error&&<div className="detail-map-status" role="status">正在加载道路和地名…</div>}
+  {error&&<div className="detail-map-status" role="status">详细地图加载未完成 <button onClick={()=>setRetry(n=>n+1)}>重试</button></div>}
+  <div className="backup-map-caption">{overview?'全程地点 · 双指缩放查看街道':'虚线为行程顺序 · 非道路导航'}</div></>;
 }

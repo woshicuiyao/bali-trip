@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['app/**', 'package*.json', '.github/workflows/deploy.yml']
+    paths: ['app/**', 'package*.json', 'scripts/**', '.github/workflows/deploy.yml']
 permissions:
   contents: read
 concurrency:
@@ -12,6 +12,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v4
@@ -26,6 +28,11 @@ jobs:
         run: |
           node --input-type=module -e "const url=new URL(process.env.VITE_TRIP_API_URL); if(url.protocol!=='https:'||url.hostname.endsWith('chatgpt.site')) throw Error('Configure an independent HTTPS trip API');"
           curl --fail --silent --show-error --max-time 20 "${VITE_TRIP_API_URL%/}/health"
+      - name: Prepare self-hosted Bali map
+        run: python3 scripts/prepare-map.py
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SEED_MAP_RELEASE: '1'
       - run: npm run build
         env:
           VITE_TRIP_API_URL: ${{ vars.VITE_TRIP_API_URL }}
