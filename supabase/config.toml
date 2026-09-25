@@ -1,0 +1,4 @@
+[functions.bali-trip]
+# This function authenticates the existing trip invitation itself, on every request.
+verify_jwt = false
+

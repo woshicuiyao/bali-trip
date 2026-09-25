@@ -1,0 +1,22 @@
+name: Verify travel app
+on:
+  workflow_dispatch:
+  push:
+    branches: ['migration/github-pages-sync']
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+        env:
+          VITE_TRIP_API_URL: https://wqamtsynorsmozcrmhjj.supabase.co/functions/v1/bali-trip
