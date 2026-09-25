@@ -1,0 +1,16 @@
+name: Check travel data service
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.github/workflows/check-data-service.yml']
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Verify public health endpoint
+        run: |
+          curl --fail --silent --show-error --connect-timeout 10 --max-time 30 'https://wqamtsynorsmozcrmhjj.supabase.co/functions/v1/bali-trip/health' -o health.json
+          node -e "const h=require('./health.json'); if(h.status!=='ok') throw Error('Data service is not healthy'); console.log('Data service is healthy');"
