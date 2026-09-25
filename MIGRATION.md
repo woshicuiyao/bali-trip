@@ -1,6 +1,6 @@
 # Bali trip: GitHub Pages migration
 
-The root `index.html` and `health.json` remain the access test already verified in WeChat. The full app under `app/` is prepared locally; do not replace the working public test until the independent API is deployed and verified.
+The full app under `app/` is deployed through GitHub Actions. The root `index.html` and `health.json` are retained legacy access-test files and are not included in the production build.
 
 ## Structure
 
@@ -39,10 +39,10 @@ References: [GitHub Pages custom workflows](https://docs.github.com/en/pages/get
 
 ## Deployment status (2026-09-25)
 
-Supabase project `wqamtsynorsmozcrmhjj` in Singapore is active. The schema and 162 source records have been imported, and edge function `bali-trip` version 1 is deployed. Anonymous and ordinary authenticated roles cannot read the tables.
+The full application was published successfully in [run 36149220744](https://github.com/woshicuiyao/bali-trip/actions/runs/36149220744). The fresh cloud build and all 11 automated tests passed. GitHub Pages uses GitHub Actions, and `VITE_TRIP_API_URL` is configured as a public repository variable.
 
-Production endpoint: `https://wqamtsynorsmozcrmhjj.supabase.co/functions/v1/bali-trip`. The local network and Chrome currently close the TLS connection before any API response. The documented `functions.supabase.co` alias fails the same way. Do not report production API validation or WeChat data synchronization as passing.
+Supabase project `wqamtsynorsmozcrmhjj` in Singapore is active, with 162 imported records and edge function `bali-trip` version 1. Anonymous and ordinary authenticated roles cannot read the tables. The old source was rechecked before cutover and still matched the imported version 1 snapshot.
 
-GitHub authorization for `woshicuiyao/bali-trip` is active. The cloud health check passed in [workflow run 36148377180](https://github.com/woshicuiyao/bali-trip/actions/runs/36148377180), confirming that the deployed function can access its database. The local TLS failure remains unresolved, and the user confirmed that the health endpoint opens successfully in WeChat. A passing cloud check alone does not establish that a phone can read or save the itinerary.
+The cloud health check passed in [run 36148377180](https://github.com/woshicuiyao/bali-trip/actions/runs/36148377180). Chrome loaded the full live itinerary and generated a viewing invitation. The user confirmed the full page opens in WeChat, but Google Maps does not display there. A completed shared save in WeChat remains to be confirmed.
 
-The full app is prepared for the `migration/github-pages-sync` branch. The public access test will be replaced after the build succeeds. Authenticated production reads and shared saves still require final client verification; the cloud health check and local tests do not substitute for it.
+The map update defaults to the itinerary map in WeChat, keeps a Google display switch and Google route/navigation links, and bundles a small Natural Earth coastline with the page. OpenStreetMap supplies optional detailed tiles; no tiles are bulk downloaded or cached outside normal browser caching. The coastline, markers and itinerary-order connections remain when those tiles fail. Mobile layout and per-day location changes were checked with every external tile request deliberately failing in a local preview. This does not prove Google is accessible in WeChat.

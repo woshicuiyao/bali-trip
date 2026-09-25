@@ -4,9 +4,12 @@ import {createPortal} from 'react-dom';
 import {LocateFixed,Expand,ExternalLink,RefreshCw,Navigation,Ship,MapPin} from 'lucide-react';
 import {placeById,type Place} from '@/lib/places';
 import {googleEmbedUrl,googleMapsUrl,islandOf,mapLegs} from '@/lib/google-maps';
+import BackupMap from './backup-map';
 
 export default function TravelMap({ids,selected,onSelect,placesHost}:{ids:string[];selected:string;onSelect:(id:string)=>void;placesHost:HTMLDivElement|null}){
  const [legIndex,setLegIndex]=useState(0),[position,setPosition]=useState<{lat:number;lng:number}|null>(null),[message,setMessage]=useState(''),[loading,setLoading]=useState(true),[attempt,setAttempt]=useState(0),[locating,setLocating]=useState(false);
+ const [provider,setProvider]=useState<'google'|'backup'>(()=>{try{const saved=sessionStorage.getItem('bali-map-provider');if(saved==='google'||saved==='backup')return saved}catch{}return /MicroMessenger/i.test(navigator.userAgent)?'backup':'google'});
+ function chooseProvider(next:'google'|'backup'){setProvider(next);setMessage('');try{sessionStorage.setItem('bali-map-provider',next)}catch{}}
  const loadTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
  function finishLoad(){if(loadTimer.current)clearTimeout(loadTimer.current);setLoading(false)}
  const key=ids.join(',');
@@ -19,8 +22,8 @@ export default function TravelMap({ids,selected,onSelect,placesHost}:{ids:string
  const external=position?`https://www.google.com/maps/search/?api=1&query=${position.lat}%2C${position.lng}`:googleMapsUrl(shown);
  useEffect(()=>{setLegIndex(0);setPosition(null);setMessage('')},[key]);
  useEffect(()=>{setPosition(null);setMessage('')},[selected]);
- useEffect(()=>{setLoading(true);loadTimer.current=setTimeout(()=>{setLoading(false);setMessage('地图未显示时，可在 Google 地图中打开。')},12000);return()=>{if(loadTimer.current)clearTimeout(loadTimer.current)}},[src,attempt]);
- function overview(){onSelect('');setPosition(null);setLegIndex(0);setMessage('');}
+ useEffect(()=>{if(provider!=='google'){setLoading(false);return}setLoading(true);loadTimer.current=setTimeout(()=>{setLoading(false);setProvider('backup');setMessage('Google 地图未响应，已显示行程地图。')},12000);return()=>{if(loadTimer.current)clearTimeout(loadTimer.current)}},[src,attempt,provider]);
+ function overview(){onSelect('');setPosition(null);setLegIndex(0);setMessage('');setAttempt(a=>a+1);}
  function locate(){
   if(!navigator.geolocation){setMessage('当前浏览器不支持定位');return;}
   setLocating(true);setMessage('正在获取位置…');
@@ -28,20 +31,21 @@ export default function TravelMap({ids,selected,onSelect,placesHost}:{ids:string
  }
  return <div className="google-map-region">
   <div className="google-map-toolbar">
-   <div className="map-leg-tabs" aria-label="地图路线分段">{legs.length>1?legs.map((l,i)=><button key={i} aria-pressed={!focus&&!position&&i===legIndex} onClick={()=>{onSelect('');setPosition(null);setLegIndex(i);setMessage('')}}>{l.label}</button>):<span>{focus?focus.name:active?.label||'巴厘岛'}</span>}</div>
+   <div className="map-leg-tabs" aria-label="地图路线分段">{provider==='backup'?<span>{focus?.name||`巴厘岛 · ${new Set(points.map(p=>p.id)).size}个行程地点`}</span>:legs.length>1?legs.map((l,i)=><button key={i} aria-pressed={!focus&&!position&&i===legIndex} onClick={()=>{onSelect('');setPosition(null);setLegIndex(i);setMessage('')}}>{l.label}</button>):<span>{focus?focus.name:active?.label||'巴厘岛'}</span>}</div>
    <button className="map-tool" aria-label="显示我的位置" disabled={locating} onClick={locate}><LocateFixed size={17}/></button>
    <button className="map-tool" aria-label="查看行程路线" onClick={overview}><Expand size={17}/></button>
    <a className="map-tool map-provider-link" href={external} target="_blank" rel="noreferrer" aria-label="在 Google 地图打开" title="在 Google 地图打开"><ExternalLink size={14}/><span>Google</span></a>
    {focus&&<a className="map-tool" href={googleMapsUrl([focus],true)} target="_blank" rel="noreferrer" aria-label="使用 Google 地图导航" title="使用 Google 地图导航"><Navigation size={17}/></a>}
   </div>
+  <div className="map-provider-picker" aria-label="地图显示方式"><button aria-pressed={provider==='backup'} onClick={()=>chooseProvider('backup')}>行程地图</button><button aria-pressed={provider==='google'} onClick={()=>chooseProvider('google')}>Google</button></div>
   <div className="google-map-stage">
-   <iframe key={`${src}-${attempt}`} src={src} title={position?'Google 地图 · 我的位置':focus?`Google 地图 · ${focus.name}`:'Google 地图 · 巴厘岛行程'} referrerPolicy="no-referrer" allow="geolocation 'none'" allowFullScreen onLoad={finishLoad} onError={()=>{finishLoad();setMessage('地图暂时无法加载，可在 Google 地图中打开。')}}/>
-   {loading&&<div className="google-map-loading" role="status"><RefreshCw className="spin" size={16}/>正在加载 Google 地图</div>}
+   {provider==='backup'?<BackupMap points={points} selected={selected} position={position} onSelect={onSelect} resetKey={attempt}/>:<iframe key={`${src}-${attempt}`} src={src} title={position?'Google 地图 · 我的位置':focus?`Google 地图 · ${focus.name}`:'Google 地图 · 巴厘岛行程'} referrerPolicy="no-referrer" allow="geolocation 'none'" allowFullScreen onLoad={finishLoad} onError={()=>{finishLoad();setProvider('backup');setMessage('Google 地图未响应，已显示行程地图。')}}/>}
+   {provider==='google'&&loading&&<div className="google-map-loading" role="status"><RefreshCw className="spin" size={16}/>正在加载 Google 地图</div>}
   </div>
   {placesHost&&points.length>0&&createPortal(<section className="itinerary-places" aria-label="行程地点">
    <div className="itinerary-places-heading"><span><MapPin size={13}/>行程地点</span><small>{crossesSea?<><Ship size={12}/>跨海船程单独安排</>:'点击地点查看地图'}</small></div>
    <div className="map-place-chips">{[...new Map(points.map(p=>[p.id,p])).values()].map(p=><button key={p.id} aria-pressed={selected===p.id&&!position} onClick={()=>{setPosition(null);onSelect(p.id)}}>{p.name}</button>)}</div>
   </section>,placesHost)}
-  {message&&<div className="google-map-message" role="status"><span>{message}</span><button aria-label="重新加载 Google 地图" onClick={()=>{setAttempt(a=>a+1);setMessage('')}}><RefreshCw size={14}/></button><button aria-label="关闭地图提示" onClick={()=>setMessage('')}>×</button></div>}
+  {message&&<div className="google-map-message" role="status"><span>{message}</span><button aria-label="重新加载 Google 地图" onClick={()=>{chooseProvider('google');setAttempt(a=>a+1)}}><RefreshCw size={14}/></button><button aria-label="关闭地图提示" onClick={()=>setMessage('')}>×</button></div>}
  </div>;
 }

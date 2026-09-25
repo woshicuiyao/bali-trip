@@ -58,6 +58,18 @@ html{overscroll-behavior:none}.travel-shell{height:100dvh;overflow:hidden}.map-a
 
 /* Keep the live map behind the entire rounded edge of the overlapping sheet. */
 .map-provider-link{display:flex;align-items:center;justify-content:center;gap:4px;width:auto;padding:0 9px;border-radius:20px;font-size:12px}
+.map-provider-picker{position:absolute;top:153px;left:12px;z-index:2;display:flex;padding:3px;border:1px solid #ffffffa8;border-radius:22px;background:#ffffffd9;box-shadow:0 2px 10px #4166770d;font-size:12px;gap:3px}
+.map-provider-picker button{padding:5px 12px;border-radius:18px;color:#527786}
+.map-provider-picker button[aria-pressed=true]{color:#008eb9;background:#ddf5ff;font-weight:650}
+.backup-map{position:absolute;inset:0;z-index:0;isolation:isolate;background:#cdeaf3;font-family:inherit}
+.backup-map .leaflet-tile-pane{filter:saturate(.45) brightness(1.025)}
+.backup-map .leaflet-control-attribution{margin-bottom:43px!important;font-size:9px;background:#ffffffdc}
+.backup-map-caption{position:absolute;bottom:66px;left:12px;z-index:1;padding:3px 8px;border-radius:10px;background:#ffffffdf;color:#527786;font-size:10px;pointer-events:none}
+.backup-marker{background:none;border:0}
+.backup-pin{display:grid;place-items:center;width:32px;height:32px;border:3px solid white;border-radius:50%;background:#22b1df;color:white;font:600 13px/1 -apple-system,sans-serif;box-shadow:0 3px 9px #245d7730}
+.backup-pin.is-selected{background:#142a37;transform:scale(1.12)}
+.backup-place-label{border:0;border-radius:12px;padding:8px 12px;font:500 13px/1.4 -apple-system,"PingFang SC",sans-serif;box-shadow:0 3px 14px #42687724}
+@media(min-width:900px){.map-provider-picker{top:192px;left:24px}.backup-map .leaflet-control-attribution{margin-bottom:5px!important}.backup-map-caption{bottom:27px;left:24px}}
 @media(max-width:899px){
  .tab-journey{background:#f8fcff}
  .tab-journey .map-area{height:calc(var(--map-height) + 12px);background:#f8fcff}
